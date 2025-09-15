@@ -35,3 +35,7 @@ flutter:
 
   assets:
     - assets/images/logo.png
+
+# ✅ Force compatible version of http for gallery_saver
+dependency_overrides:
+  http: ^0.13.6
