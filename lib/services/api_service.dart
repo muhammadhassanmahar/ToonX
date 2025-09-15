@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart'; // for debugPrint
 import '../utils/app_constants.dart';
 
 class ApiService {
@@ -25,16 +26,18 @@ class ApiService {
         // Defensive: sometimes model returns nested output
         if (data['output'] != null && data['output'] is List && data['output'].isNotEmpty) {
           final candidate = data['output'][0];
-          if (candidate is Map && candidate['url'] != null) return candidate['url'] as String;
+          if (candidate is Map && candidate['url'] != null) {
+            return candidate['url'] as String;
+          }
         }
         return null;
       } else {
-        // print server error for debugging
-        print('DeepAI error ${streamed.statusCode}: $body');
+        // log server error
+        debugPrint('DeepAI error ${streamed.statusCode}: $body');
         return null;
       }
     } catch (e) {
-      print('API Error: $e');
+      debugPrint('API Error: $e');
       return null;
     }
   }
