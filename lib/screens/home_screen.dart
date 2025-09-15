@@ -22,24 +22,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final ImagePicker _picker = ImagePicker();
 
+  /// ✅ Pick image from gallery
   Future<void> _pickImage() async {
-    // ✅ Check permission before picking
     var status = await Permission.photos.request();
+
     if (status.isGranted) {
       final XFile? pickedFile =
           await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
-        setState(() {
-          _image = File(pickedFile.path);
-        });
+        if (!mounted) return; // ✅ Fix
+        setState(() => _image = File(pickedFile.path));
       }
     } else {
+      if (!mounted) return; // ✅ Fix
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gallery permission denied")),
+        const SnackBar(content: Text("⚠️ Gallery permission denied")),
       );
     }
   }
 
+  /// ✅ Call Toonify API
   Future<void> _cartoonify() async {
     if (_image == null) return;
 
@@ -51,11 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse("https://api.deepai.org/api/toonify"), // Cartoonify API
+        Uri.parse("https://api.deepai.org/api/toonify"),
       );
 
       request.headers['Api-Key'] =
-          "06be970e-afa0-4150-a186-eda5b221334c"; // Tumhari API key
+          "06be970e-afa0-4150-a186-eda5b221334c"; // 👉 apni API key
 
       request.files
           .add(await http.MultipartFile.fromPath('image', _image!.path));
@@ -65,25 +67,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(responseBody.body);
-        setState(() {
-          _cartoonUrl = data["output_url"];
-        });
-        print("✅ Cartoonify Success: $_cartoonUrl");
+        if (!mounted) return; // ✅ Fix
+        setState(() => _cartoonUrl = data["output_url"]);
+        debugPrint("✅ Cartoonify Success: $_cartoonUrl");
       } else {
-        print("❌ Error: ${response.statusCode} - ${responseBody.body}");
+        debugPrint("❌ Error: ${response.statusCode} - ${responseBody.body}");
+        if (!mounted) return; // ✅ Fix
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Failed: ${responseBody.body}")),
+        );
       }
     } catch (e) {
-      print("⚠️ Exception: $e");
+      debugPrint("⚠️ Exception: $e");
     }
 
+    if (!mounted) return; // ✅ Fix
     setState(() => _processing = false);
   }
 
+  /// ✅ Download image and save to gallery
   Future<void> _downloadCartoon() async {
     if (_cartoonUrl == null) return;
 
     try {
-      // ✅ Get storage directory
       final dir = await getTemporaryDirectory();
       final filePath = "${dir.path}/toonx_cartoon.jpg";
 
@@ -91,70 +97,81 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = File(filePath);
       await file.writeAsBytes(response.bodyBytes);
 
-      // ✅ Save to gallery
       await GallerySaver.saveImage(file.path);
 
+      if (!mounted) return; // ✅ Fix
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Saved to gallery ✅")),
+        const SnackBar(content: Text("✅ Saved to gallery")),
       );
     } catch (e) {
-      print("⚠️ Download error: $e");
+      debugPrint("⚠️ Download error: $e");
     }
   }
 
+  /// ✅ UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("ToonX"),
+        title: const Text("🎨 ToonX Cartoonify"),
         centerTitle: true,
         backgroundColor: Colors.deepPurple,
       ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _image == null
-                  ? const Text("No image selected")
-                  : Image.file(_image!, height: 200),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.photo_library),
-                label: const Text("Pick Image"),
-              ),
-              const SizedBox(height: 20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Selected image preview
+                _image == null
+                    ? const Text("No image selected")
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(_image!, height: 200),
+                      ),
+                const SizedBox(height: 20),
 
-              // ✅ Loader ya button
-              _processing
-                  ? const SpinKitFadingCircle(
-                      color: Colors.deepPurple,
-                      size: 50,
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: _cartoonify,
-                      icon: const Icon(Icons.auto_awesome),
-                      label: const Text("Cartoonify"),
-                    ),
-
-              const SizedBox(height: 20),
-
-              // ✅ Cartoonify result ke liye button
-              if (_cartoonUrl != null)
-                Column(
-                  children: [
-                    Image.network(_cartoonUrl!, height: 200),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: _downloadCartoon,
-                      icon: const Icon(Icons.download),
-                      label: const Text("Download"),
-                    ),
-                  ],
+                // Pick Image
+                ElevatedButton.icon(
+                  onPressed: _pickImage,
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text("Pick Image"),
                 ),
-            ],
+                const SizedBox(height: 20),
+
+                // Loader / Cartoonify button
+                _processing
+                    ? const SpinKitFadingCircle(
+                        color: Colors.deepPurple,
+                        size: 50,
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: _cartoonify,
+                        icon: const Icon(Icons.auto_awesome),
+                        label: const Text("Cartoonify"),
+                      ),
+                const SizedBox(height: 20),
+
+                // Cartoon result
+                if (_cartoonUrl != null)
+                  Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(_cartoonUrl!, height: 200),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _downloadCartoon,
+                        icon: const Icon(Icons.download),
+                        label: const Text("Download"),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
       ),
