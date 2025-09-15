@@ -6,12 +6,12 @@ import 'package:gallery_saver/gallery_saver.dart';
 
 class ResultScreen extends StatefulWidget {
   final File originalImage;
-  final String cartoonUrl;
+  final String cartoonPathOrUrl; // can be URL or local file path
 
   const ResultScreen({
     super.key,
     required this.originalImage,
-    required this.cartoonUrl,
+    required this.cartoonPathOrUrl,
   });
 
   @override
@@ -21,30 +21,39 @@ class ResultScreen extends StatefulWidget {
 class _ResultScreenState extends State<ResultScreen> {
   bool _saving = false;
 
+  bool get _isNetworkImage =>
+      widget.cartoonPathOrUrl.startsWith('http'); // simple check
+
   Future<void> _downloadAndSave() async {
     setState(() => _saving = true);
     try {
-      final res = await http.get(Uri.parse(widget.cartoonUrl));
-      if (res.statusCode == 200) {
-        final bytes = res.bodyBytes;
-        final dir = await getTemporaryDirectory();
-        final file = File(
-          '${dir.path}/toonx_${DateTime.now().millisecondsSinceEpoch}.png',
-        );
-        await file.writeAsBytes(bytes);
-        await GallerySaver.saveImage(file.path, albumName: 'ToonX');
+      File file;
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Saved to gallery ✅')),
+      if (_isNetworkImage) {
+        // Download from network
+        final res = await http.get(Uri.parse(widget.cartoonPathOrUrl));
+        if (res.statusCode == 200) {
+          final bytes = res.bodyBytes;
+          final dir = await getTemporaryDirectory();
+          file = File(
+            '${dir.path}/toonx_${DateTime.now().millisecondsSinceEpoch}.png',
           );
+          await file.writeAsBytes(bytes);
+        } else {
+          throw Exception("❌ Failed to download image");
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('❌ Failed to download image')),
-          );
-        }
+        // Already local file
+        file = File(widget.cartoonPathOrUrl);
+      }
+
+      // Save to gallery
+      await GallerySaver.saveImage(file.path, albumName: 'ToonX');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved to gallery ✅')),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -61,6 +70,10 @@ class _ResultScreenState extends State<ResultScreen> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 700;
 
+    final cartoonWidget = _isNetworkImage
+        ? Image.network(widget.cartoonPathOrUrl, fit: BoxFit.contain)
+        : Image.file(File(widget.cartoonPathOrUrl), fit: BoxFit.contain);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Result')),
       body: Padding(
@@ -74,17 +87,12 @@ class _ResultScreenState extends State<ResultScreen> {
                         Expanded(
                           child: _buildBox(
                             'Original',
-                            Image.file(widget.originalImage,
-                                fit: BoxFit.contain),
+                            Image.file(widget.originalImage, fit: BoxFit.contain),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _buildBox(
-                            'Cartoon',
-                            Image.network(widget.cartoonUrl,
-                                fit: BoxFit.contain),
-                          ),
+                          child: _buildBox('Cartoon', cartoonWidget),
                         ),
                       ],
                     )
@@ -93,17 +101,12 @@ class _ResultScreenState extends State<ResultScreen> {
                         Expanded(
                           child: _buildBox(
                             'Original',
-                            Image.file(widget.originalImage,
-                                fit: BoxFit.contain),
+                            Image.file(widget.originalImage, fit: BoxFit.contain),
                           ),
                         ),
                         const SizedBox(height: 12),
                         Expanded(
-                          child: _buildBox(
-                            'Cartoon',
-                            Image.network(widget.cartoonUrl,
-                                fit: BoxFit.contain),
-                          ),
+                          child: _buildBox('Cartoon', cartoonWidget),
                         ),
                       ],
                     ),
