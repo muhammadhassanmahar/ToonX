@@ -1,12 +1,17 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data'; // ✅ For Uint8List
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:gallery_saver/gallery_saver.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:gallery_saver/gallery_saver.dart';
+import 'package:http/http.dart' as http;
+
+// Mobile-only imports
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,34 +21,43 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  File? _image;
+  File? _image; // Mobile
+  Uint8List? _webImage; // Web
   bool _processing = false;
   String? _cartoonUrl;
 
   final ImagePicker _picker = ImagePicker();
 
-  /// ✅ Pick image from gallery
+  /// Pick image (web + mobile)
   Future<void> _pickImage() async {
-    var status = await Permission.photos.request();
+    if (!kIsWeb) {
+      var status = await Permission.photos.request();
+      if (!status.isGranted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("⚠️ Gallery permission denied")),
+        );
+        return;
+      }
+    }
 
-    if (status.isGranted) {
-      final XFile? pickedFile =
-          await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        if (!mounted) return; // ✅ Fix
+    final XFile? pickedFile =
+        await _picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      if (!mounted) return;
+      if (kIsWeb) {
+        _webImage = await pickedFile.readAsBytes();
+        setState(() => _image = null);
+      } else {
         setState(() => _image = File(pickedFile.path));
       }
-    } else {
-      if (!mounted) return; // ✅ Fix
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Gallery permission denied")),
-      );
     }
   }
 
-  /// ✅ Call Toonify API
+  /// Call Toonify API
   Future<void> _cartoonify() async {
-    if (_image == null) return;
+    if (_image == null && _webImage == null) return;
 
     setState(() {
       _processing = true;
@@ -55,24 +69,33 @@ class _HomeScreenState extends State<HomeScreen> {
         'POST',
         Uri.parse("https://api.deepai.org/api/toonify"),
       );
+      request.headers['Api-Key'] = "06be970e-afa0-4150-a186-eda5b221334c";
 
-      request.headers['Api-Key'] =
-          "06be970e-afa0-4150-a186-eda5b221334c"; // 👉 apni API key
-
-      request.files
-          .add(await http.MultipartFile.fromPath('image', _image!.path));
+      if (kIsWeb && _webImage != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            _webImage!,
+            filename: 'upload.jpg',
+          ),
+        );
+      } else if (_image != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('image', _image!.path),
+        );
+      }
 
       var response = await request.send();
       var responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
         final data = json.decode(responseBody.body);
-        if (!mounted) return; // ✅ Fix
+        if (!mounted) return;
         setState(() => _cartoonUrl = data["output_url"]);
         debugPrint("✅ Cartoonify Success: $_cartoonUrl");
       } else {
         debugPrint("❌ Error: ${response.statusCode} - ${responseBody.body}");
-        if (!mounted) return; // ✅ Fix
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("❌ Failed: ${responseBody.body}")),
         );
@@ -81,36 +104,49 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint("⚠️ Exception: $e");
     }
 
-    if (!mounted) return; // ✅ Fix
+    if (!mounted) return;
     setState(() => _processing = false);
   }
 
-  /// ✅ Download image and save to gallery
+  /// Download or handle cartoon
   Future<void> _downloadCartoon() async {
     if (_cartoonUrl == null) return;
 
-    try {
-      final dir = await getTemporaryDirectory();
-      final filePath = "${dir.path}/toonx_cartoon.jpg";
-
-      final response = await http.get(Uri.parse(_cartoonUrl!));
-      final file = File(filePath);
-      await file.writeAsBytes(response.bodyBytes);
-
-      await GallerySaver.saveImage(file.path);
-
-      if (!mounted) return; // ✅ Fix
+    if (kIsWeb) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Saved to gallery")),
+        const SnackBar(
+          content: Text("💡 Right-click on image to save in web browsers."),
+        ),
       );
-    } catch (e) {
-      debugPrint("⚠️ Download error: $e");
+    } else {
+      try {
+        final dir = await getTemporaryDirectory();
+        final filePath = "${dir.path}/toonx_cartoon.jpg";
+        final response = await http.get(Uri.parse(_cartoonUrl!));
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+        await GallerySaver.saveImage(file.path);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Saved to gallery")),
+        );
+      } catch (e) {
+        debugPrint("⚠️ Download error: $e");
+      }
     }
   }
 
-  /// ✅ UI
   @override
   Widget build(BuildContext context) {
+    final imageWidget = kIsWeb
+        ? (_webImage != null
+            ? Image.memory(_webImage!, height: 200)
+            : const Text("No image selected"))
+        : (_image != null
+            ? Image.file(_image!, height: 200)
+            : const Text("No image selected"));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("🎨 ToonX Cartoonify"),
@@ -124,24 +160,17 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Selected image preview
-                _image == null
-                    ? const Text("No image selected")
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.file(_image!, height: 200),
-                      ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: imageWidget,
+                ),
                 const SizedBox(height: 20),
-
-                // Pick Image
                 ElevatedButton.icon(
                   onPressed: _pickImage,
                   icon: const Icon(Icons.photo_library),
                   label: const Text("Pick Image"),
                 ),
                 const SizedBox(height: 20),
-
-                // Loader / Cartoonify button
                 _processing
                     ? const SpinKitFadingCircle(
                         color: Colors.deepPurple,
@@ -153,8 +182,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: const Text("Cartoonify"),
                       ),
                 const SizedBox(height: 20),
-
-                // Cartoon result
                 if (_cartoonUrl != null)
                   Column(
                     children: [
@@ -163,11 +190,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Image.network(_cartoonUrl!, height: 200),
                       ),
                       const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _downloadCartoon,
-                        icon: const Icon(Icons.download),
-                        label: const Text("Download"),
-                      ),
+                      // ✅ Fixed prefer_const_constructors warning
+                      if (kIsWeb)
+                        ElevatedButton.icon(
+                          onPressed: _downloadCartoon,
+                          icon: const Icon(Icons.download),
+                          label: const Text("Right-click to save (Web)"),
+                        )
+                      else
+                        ElevatedButton.icon(
+                          onPressed: _downloadCartoon,
+                          icon: const Icon(Icons.download),
+                          label: const Text("Download"),
+                        ),
                     ],
                   ),
               ],
