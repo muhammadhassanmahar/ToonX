@@ -1,6 +1,8 @@
 name: toonx
 description: ToonX - Cartoonify images using DeepAI CartoonGAN
 publish_to: 'none'
+
+# Versioning
 version: 1.0.0+1
 
 environment:
@@ -10,7 +12,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Networking & images
+  # Networking & image handling
   http: ^0.13.6
   image_picker: ^0.8.7+4
 
@@ -30,5 +32,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/
+
+ # assets:
+ #   - assets/images/
