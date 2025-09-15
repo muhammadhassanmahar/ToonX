@@ -8,7 +8,11 @@ class ResultScreen extends StatefulWidget {
   final File originalImage;
   final String cartoonUrl;
 
-  const ResultScreen({super.key, required this.originalImage, required this.cartoonUrl});
+  const ResultScreen({
+    super.key,
+    required this.originalImage,
+    required this.cartoonUrl,
+  });
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -24,15 +28,30 @@ class _ResultScreenState extends State<ResultScreen> {
       if (res.statusCode == 200) {
         final bytes = res.bodyBytes;
         final dir = await getTemporaryDirectory();
-        final file = File('${dir.path}/toonx_${DateTime.now().millisecondsSinceEpoch}.png');
+        final file = File(
+          '${dir.path}/toonx_${DateTime.now().millisecondsSinceEpoch}.png',
+        );
         await file.writeAsBytes(bytes);
         await GallerySaver.saveImage(file.path, albumName: 'ToonX');
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to gallery')));
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Saved to gallery ✅')),
+          );
+        }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to download image')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ Failed to download image')),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('⚠️ Error: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -41,6 +60,7 @@ class _ResultScreenState extends State<ResultScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 700;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Result')),
       body: Padding(
@@ -51,16 +71,40 @@ class _ResultScreenState extends State<ResultScreen> {
               child: isWide
                   ? Row(
                       children: [
-                        Expanded(child: _buildBox('Original', Image.file(widget.originalImage, fit: BoxFit.contain))),
+                        Expanded(
+                          child: _buildBox(
+                            'Original',
+                            Image.file(widget.originalImage,
+                                fit: BoxFit.contain),
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildBox('Cartoon', Image.network(widget.cartoonUrl, fit: BoxFit.contain))),
+                        Expanded(
+                          child: _buildBox(
+                            'Cartoon',
+                            Image.network(widget.cartoonUrl,
+                                fit: BoxFit.contain),
+                          ),
+                        ),
                       ],
                     )
                   : Column(
                       children: [
-                        Expanded(child: _buildBox('Original', Image.file(widget.originalImage, fit: BoxFit.contain))),
+                        Expanded(
+                          child: _buildBox(
+                            'Original',
+                            Image.file(widget.originalImage,
+                                fit: BoxFit.contain),
+                          ),
+                        ),
                         const SizedBox(height: 12),
-                        Expanded(child: _buildBox('Cartoon', Image.network(widget.cartoonUrl, fit: BoxFit.contain))),
+                        Expanded(
+                          child: _buildBox(
+                            'Cartoon',
+                            Image.network(widget.cartoonUrl,
+                                fit: BoxFit.contain),
+                          ),
+                        ),
                       ],
                     ),
             ),
@@ -69,9 +113,23 @@ class _ResultScreenState extends State<ResultScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _saving ? null : _downloadAndSave,
-                icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.download),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.download),
                 label: Text(_saving ? 'Saving...' : 'Download Cartoon'),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -90,8 +148,20 @@ class _ResultScreenState extends State<ResultScreen> {
         Expanded(
           child: Container(
             width: double.infinity,
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)]),
-            child: ClipRRect(borderRadius: BorderRadius.circular(12), child: child),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 8,
+                )
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: child,
+            ),
           ),
         ),
       ],
