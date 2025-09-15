@@ -2,10 +2,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart'; // for debugPrint
+import 'package:path_provider/path_provider.dart'; // for temp directory
 import '../utils/app_constants.dart';
 
 class ApiService {
-  /// Upload image file to RapidAPI Cartoon Yourself and return cartoon image URL (or null)
+  /// Upload image file to RapidAPI Cartoon Yourself and return cartoon image path/URL
   static Future<String?> cartoonifyImage(File imageFile) async {
     try {
       final uri = Uri.parse('${AppConstants.baseUrl}${AppConstants.cartoonEndpoint}');
@@ -27,13 +28,21 @@ class ApiService {
       if (streamed.statusCode == 200) {
         final data = json.decode(body);
 
-        // Check typical RapidAPI response
+        // Case 1: API returns URL
         if (data is Map && data['url'] != null) {
           return data['url'] as String;
         }
-
         if (data['output_url'] != null) {
           return data['output_url'] as String;
+        }
+
+        // Case 2: API returns Base64 image
+        if (data['image_base64'] != null) {
+          final bytes = base64Decode(data['image_base64']);
+          final tempDir = await getTemporaryDirectory();
+          final file = File('${tempDir.path}/cartoon_result.png');
+          await file.writeAsBytes(bytes);
+          return file.path; // return local file path
         }
 
         return null;
