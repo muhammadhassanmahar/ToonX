@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -17,23 +18,35 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   File? _image;
   bool _processing = false;
+  String? _cartoonUrl;
 
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile =
-        await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-      });
+    // ✅ Check permission before picking
+    var status = await Permission.photos.request();
+    if (status.isGranted) {
+      final XFile? pickedFile =
+          await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        setState(() {
+          _image = File(pickedFile.path);
+        });
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Gallery permission denied")),
+      );
     }
   }
 
   Future<void> _cartoonify() async {
     if (_image == null) return;
 
-    setState(() => _processing = true);
+    setState(() {
+      _processing = true;
+      _cartoonUrl = null;
+    });
 
     try {
       var request = http.MultipartRequest(
@@ -42,16 +55,20 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       request.headers['Api-Key'] =
-          "06be970e-afa0-4150-a186-eda5b221334c"; // tumhari API key
+          "06be970e-afa0-4150-a186-eda5b221334c"; // Tumhari API key
 
-      request.files.add(await http.MultipartFile.fromPath('image', _image!.path));
+      request.files
+          .add(await http.MultipartFile.fromPath('image', _image!.path));
 
       var response = await request.send();
       var responseBody = await http.Response.fromStream(response);
 
       if (response.statusCode == 200) {
-        print("✅ Cartoonify Success: ${responseBody.body}");
-        // TODO: response se image URL nikalna & download/save karna
+        final data = json.decode(responseBody.body);
+        setState(() {
+          _cartoonUrl = data["output_url"];
+        });
+        print("✅ Cartoonify Success: $_cartoonUrl");
       } else {
         print("❌ Error: ${response.statusCode} - ${responseBody.body}");
       }
@@ -60,6 +77,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     setState(() => _processing = false);
+  }
+
+  Future<void> _downloadCartoon() async {
+    if (_cartoonUrl == null) return;
+
+    try {
+      // ✅ Get storage directory
+      final dir = await getTemporaryDirectory();
+      final filePath = "${dir.path}/toonx_cartoon.jpg";
+
+      final response = await http.get(Uri.parse(_cartoonUrl!));
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      // ✅ Save to gallery
+      await GallerySaver.saveImage(file.path);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Saved to gallery ✅")),
+      );
+    } catch (e) {
+      print("⚠️ Download error: $e");
+    }
   }
 
   @override
@@ -87,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ✅ Yahan loader ya button show hoga
+              // ✅ Loader ya button
               _processing
                   ? const SpinKitFadingCircle(
                       color: Colors.deepPurple,
@@ -98,6 +138,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.auto_awesome),
                       label: const Text("Cartoonify"),
                     ),
+
+              const SizedBox(height: 20),
+
+              // ✅ Cartoonify result ke liye button
+              if (_cartoonUrl != null)
+                Column(
+                  children: [
+                    Image.network(_cartoonUrl!, height: 200),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _downloadCartoon,
+                      icon: const Icon(Icons.download),
+                      label: const Text("Download"),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
